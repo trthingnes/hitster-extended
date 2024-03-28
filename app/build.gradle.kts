@@ -60,6 +60,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.gson)
+    implementation(libs.core)
+    implementation(libs.zxing.android.embedded)
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
