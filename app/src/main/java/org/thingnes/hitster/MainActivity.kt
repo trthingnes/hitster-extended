@@ -3,53 +3,40 @@ package org.thingnes.hitster
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
+import com.journeyapps.barcodescanner.BarcodeCallback
+import com.journeyapps.barcodescanner.BarcodeResult
+import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
-import org.thingnes.hitster.ui.theme.HitsterTheme
 
-private const val CLIENT_ID = "70ee3efe833341efa88d18f13f154c60"
-private const val REDIRECT_URI = "http://org.thingnes.hitster/callback"
 
-class MainActivity : ComponentActivity() {
-    private var remote: SpotifyAppRemote? = null
+private const val SPOTIFY_CLIENT_ID = "70ee3efe833341efa88d18f13f154c60"
+private const val SPOTIFY_REDIRECT_URI = "http://org.thingnes.hitster/callback"
+
+class MainActivity : ComponentActivity(), BarcodeCallback {
+    private var spotifyRemote: SpotifyAppRemote? = null
+    private var barcodeView: DecoratedBarcodeView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            HitsterTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    Button(onClick = {
-                        remote?.playerApi?.play("spotify:track:5iFhkFf9JLA3XiROdYsg1i")
-                    }) {
-                        Text("Play music")
-                    }
-                }
-            }
-        }
+        setContentView(R.layout.main)
+        barcodeView = findViewById(R.id.zxing_barcode_scanner)
+        barcodeView?.setStatusText("")
+        barcodeView?.decodeSingle(this)
     }
 
     override fun onStart() {
         super.onStart()
         SpotifyAppRemote.connect(
             this,
-            ConnectionParams.Builder(CLIENT_ID)
-                .setRedirectUri(REDIRECT_URI)
+            ConnectionParams.Builder(SPOTIFY_CLIENT_ID)
+                .setRedirectUri(SPOTIFY_REDIRECT_URI)
                 .showAuthView(true)
                 .build(),
             object : Connector.ConnectionListener {
                 override fun onConnected(appRemote: SpotifyAppRemote) {
-                    remote = appRemote
+                    this@MainActivity.spotifyRemote = appRemote
                     Log.d("Spotify", "Successfully connected to app remote")
                 }
 
@@ -59,10 +46,31 @@ class MainActivity : ComponentActivity() {
             })
     }
 
+    override fun barcodeResult(result: BarcodeResult?) {
+        result?.let {
+            spotifyRemote?.playerApi?.play("spotify:track:${it.text}")
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        barcodeView?.pause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        barcodeView?.resume()
+    }
+
     override fun onStop() {
         super.onStop()
-        remote?.let {
+        spotifyRemote?.let {
             SpotifyAppRemote.disconnect(it)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        barcodeView?.pauseAndWait()
     }
 }
