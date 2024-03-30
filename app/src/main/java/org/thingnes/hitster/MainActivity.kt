@@ -2,6 +2,7 @@ package org.thingnes.hitster
 
 import android.os.Bundle
 import android.util.Log
+import android.widget.Switch
 import androidx.activity.ComponentActivity
 import com.journeyapps.barcodescanner.BarcodeCallback
 import com.journeyapps.barcodescanner.BarcodeResult
@@ -9,6 +10,9 @@ import com.journeyapps.barcodescanner.DecoratedBarcodeView
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
+import java.net.HttpURLConnection
+import java.net.MalformedURLException
+import java.net.URL
 
 
 private const val SPOTIFY_CLIENT_ID = "70ee3efe833341efa88d18f13f154c60"
@@ -17,13 +21,23 @@ private const val SPOTIFY_REDIRECT_URI = "http://org.thingnes.hitster/callback"
 class MainActivity : ComponentActivity(), BarcodeCallback {
     private var spotifyRemote: SpotifyAppRemote? = null
     private var barcodeView: DecoratedBarcodeView? = null
+    private var switchView: Switch? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.main)
+
         barcodeView = findViewById(R.id.zxing_barcode_scanner)
         barcodeView?.setStatusText("")
-        barcodeView?.decodeSingle(this)
+
+        switchView = findViewById(R.id.scanner_switch)
+        switchView?.setOnCheckedChangeListener { view, _ ->
+            Log.d("MainActivity", "Running onCheckedChangeListener")
+            if (view.isChecked) {
+                Log.d("MainActivity", "Running decodeSingle")
+                barcodeView?.decodeSingle(this)
+            }
+        }
     }
 
     override fun onStart() {
@@ -46,9 +60,47 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
             })
     }
 
+
     override fun barcodeResult(result: BarcodeResult?) {
-        result?.let {
-            spotifyRemote?.playerApi?.play("spotify:track:${it.text}")
+        Thread {
+            result?.let {
+                getSpotifyTrackId(result)?.let { id ->
+                    Log.i("MainActivity", "Playing track $id")
+                    spotifyRemote?.playerApi?.play("spotify:track:$id")
+                }
+            }
+
+            switchView?.post {
+                switchView?.isChecked = false
+            }
+        }.start()
+    }
+
+    private fun getSpotifyTrackId(result: BarcodeResult?): String? {
+        return try {
+            val url = URL(result?.text)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "HEAD"
+            connection.instanceFollowRedirects = false
+
+            val id = if (connection.responseCode in intArrayOf(
+                    HttpURLConnection.HTTP_MOVED_PERM,
+                    HttpURLConnection.HTTP_MOVED_TEMP
+                )
+            ) {
+                val redirectUrl = connection.getHeaderField("Location")
+                Log.d("MainActivity", "Redirected to $redirectUrl")
+                Regex("track/(\\w+)\\?").find(redirectUrl)?.groupValues?.get(1)
+            } else {
+                Log.d("MainActivity", "No redirect, using $url")
+                Regex("track/(\\w+)\\?").find(url.toString())?.groupValues?.get(1)
+            }
+
+            connection.disconnect()
+            id
+        } catch (e: MalformedURLException) {
+            Log.d("MainActivity", "URL is malformed, skipping HTTP call")
+            result?.text
         }
     }
 
@@ -62,15 +114,15 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
         barcodeView?.resume()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        barcodeView?.pauseAndWait()
+    }
+
     override fun onStop() {
         super.onStop()
         spotifyRemote?.let {
             SpotifyAppRemote.disconnect(it)
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        barcodeView?.pauseAndWait()
     }
 }
