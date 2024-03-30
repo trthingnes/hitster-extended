@@ -35,7 +35,10 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
             Log.d("MainActivity", "Running onCheckedChangeListener")
             if (view.isChecked) {
                 Log.d("MainActivity", "Running decodeSingle")
+                barcodeView?.resume()
                 barcodeView?.decodeSingle(this)
+            } else {
+                barcodeView?.pause()
             }
         }
     }
@@ -51,15 +54,14 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
             object : Connector.ConnectionListener {
                 override fun onConnected(appRemote: SpotifyAppRemote) {
                     this@MainActivity.spotifyRemote = appRemote
-                    Log.d("Spotify", "Successfully connected to app remote")
+                    Log.d("MainActivity", "Successfully connected to app remote")
                 }
 
                 override fun onFailure(throwable: Throwable) {
-                    Log.e("Spotify", throwable.message, throwable)
+                    Log.e("MainActivity", throwable.message, throwable)
                 }
             })
     }
-
 
     override fun barcodeResult(result: BarcodeResult?) {
         Thread {
@@ -77,6 +79,8 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
     }
 
     private fun getSpotifyTrackId(result: BarcodeResult?): String? {
+        val spotifyUrlRegex = Regex("track/(\\w+)\\?")
+
         return try {
             val url = URL(result?.text)
             val connection = url.openConnection() as HttpURLConnection
@@ -90,10 +94,10 @@ class MainActivity : ComponentActivity(), BarcodeCallback {
             ) {
                 val redirectUrl = connection.getHeaderField("Location")
                 Log.d("MainActivity", "Redirected to $redirectUrl")
-                Regex("track/(\\w+)\\?").find(redirectUrl)?.groupValues?.get(1)
+                spotifyUrlRegex.find(redirectUrl)?.groupValues?.get(1)
             } else {
                 Log.d("MainActivity", "No redirect, using $url")
-                Regex("track/(\\w+)\\?").find(url.toString())?.groupValues?.get(1)
+                spotifyUrlRegex.find(url.toString())?.groupValues?.get(1)
             }
 
             connection.disconnect()
